@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-logout-whatsapp"
+description = "Enables the logout_whatsapp command without any pre-configured scope."
+commands.allow = ["logout_whatsapp"]
+
+[[permission]]
+identifier = "deny-logout-whatsapp"
+description = "Denies the logout_whatsapp command without any pre-configured scope."
+commands.deny = ["logout_whatsapp"]

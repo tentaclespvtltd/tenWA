@@ -1,0 +1,34 @@
+[[permission]]
+identifier = "allow-open-whatsapp"
+description = "Enables open_whatsapp command"
+commands.allow = ["open_whatsapp"]
+
+[[permission]]
+identifier = "allow-auth-status-update"
+description = "Enables auth_status_update command"
+commands.allow = ["auth_status_update"]
+
+[[permission]]
+identifier = "allow-send-message"
+description = "Enables send_message command"
+commands.allow = ["send_message"]
+
+[[permission]]
+identifier = "allow-send-message-with-media"
+description = "Enables send_message_with_media command"
+commands.allow = ["send_message_with_media"]
+
+[[permission]]
+identifier = "allow-logout-whatsapp"
+description = "Enables logout_whatsapp command"
+commands.allow = ["logout_whatsapp"]
+
+[[permission]]
+identifier = "allow-get-engine-status"
+description = "Enables get_engine_status command"
+commands.allow = ["get_engine_status"]
+
+[[permission]]
+identifier = "allow-save-config-val"
+description = "Enables save_config_val command"
+commands.allow = ["save_config_val"]

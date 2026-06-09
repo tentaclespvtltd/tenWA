@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-auth-status-update"
+description = "Enables the auth_status_update command without any pre-configured scope."
+commands.allow = ["auth_status_update"]
+
+[[permission]]
+identifier = "deny-auth-status-update"
+description = "Denies the auth_status_update command without any pre-configured scope."
+commands.deny = ["auth_status_update"]
