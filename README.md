@@ -9,14 +9,19 @@ A headless WhatsApp Web integration plugin for Tauri v2. It allows launching a W
 ### 1. Add to Crate Dependencies
 Add the dependency to your `src-tauri/Cargo.toml` dependencies.
 
-#### Option A: GitHub Dependency (Recommended)
-Add it directly from the public repository:
+#### Option A: CLI Command (Recommended & Easiest)
+Run the following command from the root directory of your Tauri project:
+```bash
+cargo add tauri-plugin-tenwa --git https://github.com/tentaclespvtltd/tenWA.git --manifest-path src-tauri/Cargo.toml
+```
+
+#### Option B: Manual Cargo.toml configuration
+Add the following line to your `src-tauri/Cargo.toml` under `[dependencies]`:
 ```toml
-[dependencies]
 tauri-plugin-tenwa = { git = "https://github.com/tentaclespvtltd/tenWA.git" }
 ```
 
-#### Option B: Local Path Dependency (For development)
+#### Option C: Local Path Dependency (For development)
 If you have cloned the plugin files locally into your project (e.g. inside `src-tauri/plugins/ten-wa`):
 ```toml
 [dependencies]
