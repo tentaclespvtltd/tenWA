@@ -58,13 +58,7 @@ To allow frontend calls to the plugin commands, configure the permissions in you
 {
   "permissions": [
     "core:default",
-    "tenwa:allow-open-whatsapp",
-    "tenwa:allow-auth-status-update",
-    "tenwa:allow-send-message",
-    "tenwa:allow-send-message-with-media",
-    "tenwa:allow-logout-whatsapp",
-    "tenwa:allow-get-engine-status",
-    "tenwa:allow-save-config-val"
+    "tenwa:default"
   ]
 }
 ```
@@ -163,7 +157,7 @@ import {
   logoutWhatsApp,
   onWhatsAppStatusChange,
   onWhatsAppQRChange
-} from 'tauri-plugin-tenwa/guest-js';
+} from 'tauri-plugin-tenwa';
 
 // 1. Start WhatsApp spooled browser engine (headless by default)
 await openWhatsApp(false); 

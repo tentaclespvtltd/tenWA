@@ -32,3 +32,17 @@ commands.allow = ["get_engine_status"]
 identifier = "allow-save-config-val"
 description = "Enables save_config_val command"
 commands.allow = ["save_config_val"]
+
+[[permission]]
+identifier = "default"
+description = "Default permissions for tenwa plugin"
+permissions = [
+    "allow-open-whatsapp",
+    "allow-auth-status-update",
+    "allow-send-message",
+    "allow-send-message-with-media",
+    "allow-logout-whatsapp",
+    "allow-get-engine-status",
+    "allow-save-config-val"
+]
+
