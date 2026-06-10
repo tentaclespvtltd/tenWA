@@ -18,15 +18,24 @@ const QR_OBSERVER: &str = r#"
 
     function tryNotify() {
         const invoke = window.__TAURI_INTERNALS__?.invoke;
-        if (!invoke) return;
+        if (!invoke) {
+            console.log("[tenWA] window.__TAURI_INTERNALS__?.invoke not found yet.");
+            return;
+        }
 
         // Find the QR canvas reliably
         const qrCanvas = document.querySelector('canvas[aria-label="Scan me!"]') || document.querySelector('div[data-ref] canvas') || document.querySelector('canvas');
         
+        // Debug logging for QR canvas finding
+        if (qrCanvas) {
+            console.log("[tenWA] Found canvas element, width:", qrCanvas.width, "height:", qrCanvas.height);
+        }
+
         // Ensure the canvas is actually the QR code (typically it's the only canvas, or a large one)
         if (qrCanvas && qrCanvas.width > 100) {
             const dataUrl = qrCanvas.toDataURL('image/png');
             if (dataUrl && dataUrl !== lastQrData) {
+                console.log("[tenWA] Emitting new QR Code dataUrl (length:", dataUrl.length, ")");
                 lastQrData = dataUrl;
                 invoke('plugin:tenwa|auth_status_update', { status: 'QR', payload: dataUrl });
             }
@@ -43,13 +52,16 @@ const QR_OBSERVER: &str = r#"
             }
 
             if (state && state !== lastStatus) {
+                console.log("[tenWA] Emitting new Auth state:", state);
                 lastStatus = state;
                 invoke('plugin:tenwa|auth_status_update', { status: state, payload: '' });
             }
         }
     }
 
+    // Try more frequently to catch the QR code quickly
     setInterval(tryNotify, 1000);
+    console.log("[tenWA] QR_OBSERVER injected and running.");
 })();
 "#;
 

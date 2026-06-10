@@ -65,135 +65,112 @@ To allow frontend calls to the plugin commands, configure the permissions in you
 
 ---
 
-## Rust Backend API
+## Function Reference: Frontend Integration (Guest JS)
 
-The plugin exposes the `TenwaExt` trait on `tauri::AppHandle`. This allows you to call commands programmatically from anywhere in your backend Rust code.
+The plugin includes a dedicated guest library **`guest-js/index.ts`** that exposes clean helper functions for your frontend application (React, Vue, Svelte, etc.).
 
-### Exposing the Extension Trait
+### `openWhatsApp`
+- **Working**: Spawns the background WhatsApp Web spooled browser engine by invoking the Rust backend.
+- **Input**: `visible?: boolean` - Optional flag to show the browser window (default: `false`).
+- **Output**: `Promise<void>` - Resolves when the engine is successfully instructed to start.
 
-```rust
-use tauri::{AppHandle, Runtime};
-use tauri_plugin_tenwa::TenwaExt;
+### `getWhatsAppStatus`
+- **Working**: Fetches the current connection and initialization status of the engine from the Rust state.
+- **Input**: None.
+- **Output**: `Promise<WhatsAppStatus>` - Resolves with an object containing:
+  - `status`: String (`'Offline'`, `'QR'`, `'CONNECTED'`, `'authenticated'`, etc.)
+  - `payload`: String (QR code base64 reference string when status is "QR", otherwise empty)
+  - `started`: Boolean (True if background webview has spooled)
 
-fn my_rust_function<R: Runtime>(app: &AppHandle<R>) {
-    // 1. Open the engine
-    let _ = app.tenwa_open(Some(false)); // Headless launch
+### `saveConfigVal`
+- **Working**: Saves a key-value configuration pair to the local `config.json` file.
+- **Input**: 
+  - `key: string` - The configuration key.
+  - `value: string` - The configuration value.
+- **Output**: `Promise<void>` - Resolves when the configuration is saved.
 
-    // 2. Query status
-    if let Ok(status) = app.tenwa_get_status() {
-        println!("WhatsApp Engine status: {}", status);
-    }
+### `sendWhatsAppMessage`
+- **Working**: Sends a plain text message to a specific phone number by evaluating JavaScript in the WhatsApp webview. Automatically strips non-numeric characters from the phone number.
+- **Input**:
+  - `phone: string` - Recipient phone number with country code (e.g. `"919876543210"`).
+  - `message: string` - Message content.
+- **Output**: `Promise<void>` - Resolves if the message was sent successfully.
 
-    // 3. Send a message
-    let _ = app.tenwa_send_message("919876543210".to_string(), "Hello from Rust backend!".to_string());
-}
-```
+### `sendWhatsAppMedia`
+- **Working**: Sends a media message (image, video, document) with an optional caption.
+- **Input**:
+  - `phone: string` - Recipient phone number.
+  - `message: string` - Caption message.
+  - `mediaBase64: string` - Raw base64 data (without "data:...base64," prefix).
+  - `mimeType: string` - Mimetype (e.g., `"image/png"`, `"application/pdf"`).
+  - `fileName: string` - Target filename.
+- **Output**: `Promise<void>`
 
-### Extension API Reference
+### `logoutWhatsApp`
+- **Working**: Logs out of the current session, unlinks the device, and closes the spooled webview window.
+- **Input**: None.
+- **Output**: `Promise<void>`
 
-```rust
-pub trait TenwaExt<R: Runtime> {
-    /// Spawns the WhatsApp webview window.
-    /// If visible is true, the window will show; if false, it runs headlessly.
-    /// If window already exists, it un-hides and focuses the window.
-    fn tenwa_open(&self, visible: Option<bool>) -> Result<(), String>;
+### `onWhatsAppStatusChange`
+- **Working**: Sets up an IPC listener for real-time authentication and status updates emitted by the plugin.
+- **Input**: 
+  - `callback: (status: string, payload: string) => void` - Function to be called whenever a status event is received.
+- **Output**: `Promise<() => void>` - Resolves with an unlisten cleanup function to remove the listener.
 
-    /// Updates internal status and emits real-time events.
-    fn tenwa_auth_status_update(&self, status: String, payload: String) -> Result<(), String>;
-
-    /// Retrieves current engine status as a serde_json::Value:
-    /// { "status": String, "payload": String, "started": bool }
-    fn tenwa_get_status(&self) -> Result<serde_json::Value, String>;
-
-    /// Saves a key-value configuration pair to local config.json.
-    fn tenwa_save_config_val(&self, key: String, value: String) -> Result<(), String>;
-
-    /// Sends a text message to the specified phone number (automatically appends @c.us).
-    fn tenwa_send_message(&self, phone: String, message: String) -> Result<(), String>;
-
-    /// Sends a base64 encoded media message (image/video/document) with optional caption.
-    fn tenwa_send_media(
-        &self,
-        phone: String,
-        message: String,
-        media_base64: String,
-        mime_type: String,
-        file_name: String,
-    ) -> Result<(), String>;
-
-    /// Programs log out from WhatsApp Web, unlinks session, and closes spooled webview window.
-    fn tenwa_logout(&self) -> Result<(), String>;
-}
-```
+### `onWhatsAppQRChange`
+- **Working**: Sets up an IPC listener specifically tuned to capture WhatsApp Web QR code string updates.
+- **Input**:
+  - `callback: (qrCode: string) => void` - Function to be called with the raw QR code string.
+- **Output**: `Promise<() => void>` - Resolves with an unlisten cleanup function.
 
 ---
 
-## Frontend Integration Guide
+## Function Reference: Backend API (Rust `TenwaExt`)
 
-The plugin includes a dedicated guest library **`guest-js/index.ts`** that exposes clean helper functions. This avoids writing raw `invoke` and `listen` commands in your frontend application.
+The plugin exposes the `TenwaExt` trait on `tauri::AppHandle`, allowing you to call these functions directly from your Rust backend anywhere `AppHandle` is accessible.
 
-### TypeScript Definitions
+### `tenwa_open`
+- **Working**: Spawns the WhatsApp webview window. Spoofs the user agent and injects observers.
+- **Input**: `visible: Option<bool>` - Show window if `Some(true)`, run headlessly if `Some(false)`.
+- **Output**: `Result<(), String>`
 
-The guest-js library exposes the `WhatsAppStatus` structure:
+### `tenwa_auth_status_update`
+- **Working**: Internally updates the `EngineState` mutex and emits the `"auth_status"` event to the frontend.
+- **Input**: 
+  - `status: String`
+  - `payload: String`
+- **Output**: `Result<(), String>`
 
-```typescript
-export interface WhatsAppStatus {
-  status: 'Offline' | 'QR' | 'CONNECTED' | 'authenticated' | string;
-  payload: string;   // QR code base64 reference string when status is "QR"
-  started: boolean;  // True if background webview has spooled
-}
-```
+### `tenwa_get_status`
+- **Working**: Retrieves current engine status from the internal state mutex.
+- **Input**: None.
+- **Output**: `Result<serde_json::Value, String>` - Returns a JSON object with `status`, `payload`, and `started`.
 
-### Exposing Guest API Helper Functions
+### `tenwa_save_config_val`
+- **Working**: Persists a configuration value to disk.
+- **Input**:
+  - `key: String`
+  - `value: String`
+- **Output**: `Result<(), String>`
 
-You can import the functions directly into your React, Vue, Svelte, or TypeScript files:
+### `tenwa_send_message`
+- **Working**: Evaluates `WWebJS.sendMessage` in the webview to send a text message.
+- **Input**:
+  - `phone: String`
+  - `message: String`
+- **Output**: `Result<(), String>`
 
-```typescript
-import { 
-  openWhatsApp, 
-  getWhatsAppStatus, 
-  sendWhatsAppMessage, 
-  sendWhatsAppMedia, 
-  logoutWhatsApp,
-  onWhatsAppStatusChange,
-  onWhatsAppQRChange
-} from 'tauri-plugin-tenwa';
+### `tenwa_send_media`
+- **Working**: Evaluates `WWebJS.sendMessage` in the webview to send media.
+- **Input**:
+  - `phone: String`
+  - `message: String`
+  - `media_base64: String`
+  - `mime_type: String`
+  - `file_name: String`
+- **Output**: `Result<(), String>`
 
-// 1. Start WhatsApp spooled browser engine (headless by default)
-await openWhatsApp(false); 
-
-// 2. Fetch current engine status
-const currentStatus = await getWhatsAppStatus();
-console.log(`State: ${currentStatus.status}, Started: ${currentStatus.started}`);
-
-// 3. Send a text message (cleans formatting automatically)
-await sendWhatsAppMessage("919876543210", "Hello from Frontend!");
-
-// 4. Send media (e.g. base64 image or pdf)
-await sendWhatsAppMedia(
-  "919876543210",
-  "Check this receipt!",
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
-  "image/png",
-  "receipt.png"
-);
-
-// 5. Unlink session and logout
-await logoutWhatsApp();
-
-// 6. Listen to real-time status updates (returns unsubscribe function)
-const unlisten = await onWhatsAppStatusChange((status, payload) => {
-  console.log(`Realtime Auth Status: ${status}`);
-});
-// Cleanup when component unmounts:
-unlisten();
-
-// 7. Listen specifically to QR Code updates (returns unsubscribe function)
-const unlistenQR = await onWhatsAppQRChange((qrCodeString) => {
-  // Feed to your favorite QR code component or canvas generator
-  console.log("QR Code Update:", qrCodeString);
-});
-// Cleanup:
-unlistenQR();
-```
-
+### `tenwa_logout`
+- **Working**: Executes multiple programmatic logout strategies in the webview to ensure the session is unlinked, then terminates the webview.
+- **Input**: None.
+- **Output**: `Result<(), String>`
