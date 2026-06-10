@@ -1,40 +1,50 @@
-# tenWA Tauri Plugin
+# tauri-plugin-tenwa
 
-A headless WhatsApp Web integration plugin for Tauri v2. It allows launching a WhatsApp Web window, automating interactions (sending text/media), and tracking login/QR status from your frontend without imposing any specific UI.
+A professional, modular, headless WhatsApp Web integration plugin for Tauri v2. It spools a background webview loading WhatsApp Web, tracks authorization and QR code states in real-time, and exposes a high-level API to send text/media messages from both your Frontend (via IPC) and your Backend (via Rust extension traits).
 
 ---
 
-## Installation
+## Architecture Overview
 
-### 1. Add to Crate Dependencies
-Add the dependency to your `src-tauri/Cargo.toml` dependencies.
-
-#### Option A: CLI Command (Recommended & Easiest)
-Run the following command from the root directory of your Tauri project:
-```bash
-cargo add tauri-plugin-tenwa --git https://github.com/tentaclespvtltd/tenWA.git --manifest-path src-tauri/Cargo.toml
+```mermaid
+graph TD
+    Frontend[Frontend React/Vite] -- "IPC Invoke" --> Commands[Tauri Plugin Commands]
+    RustBackend[Rust Backend Code] -- "Rust API" --> TenwaExt[TenwaExt Trait on AppHandle]
+    Commands --> TenwaExt
+    TenwaExt -- "Controls Webview" --> Webview[whatsapp spooled webview]
+    Webview -- "DOM Observers" --> Injections[JS injections & utils]
+    Injections -- "IPC Event" --> RustState[EngineState Mutex State]
+    RustState -- "Real-time Emitter" --> Frontend
 ```
 
-#### Option B: Manual Cargo.toml configuration
-Add the following line to your `src-tauri/Cargo.toml` under `[dependencies]`:
-```toml
-tauri-plugin-tenwa = { git = "https://github.com/tentaclespvtltd/tenWA.git" }
-```
+The plugin operates by spawning a background Tauri Webview window named `"whatsapp"`. Custom scripts are injected to:
+1. Expose WhatsApp Web's internal ES modules (`injections::EXPOSE_AUTH_STORE`).
+2. Attach sending utilities (`injections::LOAD_UTILS`).
+3. Monitor page state and QR code canvas renders (`QR_OBSERVER`), which feed updates back to the Rust backend and emit real-time updates to the frontend.
 
-#### Option C: Local Path Dependency (For development)
-If you have cloned the plugin files locally into your project (e.g. inside `src-tauri/plugins/ten-wa`):
+---
+
+## Installation & Setup
+
+### 1. Register the Dependency
+Add the dependency to your `src-tauri/Cargo.toml` file.
+
 ```toml
 [dependencies]
-tauri-plugin-tenwa = { path = "plugins/ten-wa" }
+# Remote Git Dependency:
+tauri-plugin-tenwa = { git = "https://github.com/tentaclespvtltd/tenWA.git", version = "0.1.0" }
+
+# Or Local Path Dependency (for development):
+# tauri-plugin-tenwa = { path = "../tenWA" }
 ```
 
 ### 2. Register the Plugin in Rust
-In your main application entry point (e.g. `src-tauri/src/main.rs`), initialize and register the plugin in the Tauri builder:
+In your main application entry point (e.g. `src-tauri/src/lib.rs` or `main.rs`), initialize and register the plugin:
 
 ```rust
-fn main() {
+pub fn run() {
     tauri::Builder::default()
-        // Register the tenWA plugin
+        // Register the tenwa plugin
         .plugin(tauri_plugin_tenwa::init())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -42,181 +52,154 @@ fn main() {
 ```
 
 ### 3. Configure Permissions
-To allow frontend calls to the plugin commands, define a grouped permission (e.g. `tenWA-allow`) in your app's `src-tauri/permissions/default.toml`:
-
-```toml
-[[permission]]
-identifier = "tenWA-allow"
-description = "Enables all tenWA plugin commands"
-permissions = [
-  "tenWA:allow-open-whatsapp",
-  "tenWA:allow-auth-status-update",
-  "tenWA:allow-send-message",
-  "tenWA:allow-send-message-with-media",
-  "tenWA:allow-logout-whatsapp",
-  "tenWA:allow-get-engine-status",
-  "tenWA:allow-save-config-val"
-]
-```
-
-Then add `"tenWA-allow"` to the permissions list in your app capabilities configuration (e.g. `src-tauri/capabilities/default.json`):
+To allow frontend calls to the plugin commands, configure the permissions in your capabilities file (e.g. `src-tauri/capabilities/default.json`):
 
 ```json
 {
   "permissions": [
     "core:default",
-    "tenWA-allow"
+    "tenwa:allow-open-whatsapp",
+    "tenwa:allow-auth-status-update",
+    "tenwa:allow-send-message",
+    "tenwa:allow-send-message-with-media",
+    "tenwa:allow-logout-whatsapp",
+    "tenwa:allow-get-engine-status",
+    "tenwa:allow-save-config-val"
   ]
 }
 ```
 
 ---
 
-## Frontend Integration Options
+## Rust Backend API
 
-Use the following JavaScript/TypeScript patterns to integrate `tenWA` into your frontend UI.
+The plugin exposes the `TenwaExt` trait on `tauri::AppHandle`. This allows you to call commands programmatically from anywhere in your backend Rust code.
 
-### 1. Listening to Status & QR Code Updates (Real-Time)
-Listen to the `auth_status` event which updates in real-time as the engine detects changes on the WhatsApp Web page.
+### Exposing the Extension Trait
+
+```rust
+use tauri::{AppHandle, Runtime};
+use tauri_plugin_tenwa::TenwaExt;
+
+fn my_rust_function<R: Runtime>(app: &AppHandle<R>) {
+    // 1. Open the engine
+    let _ = app.tenwa_open(Some(false)); // Headless launch
+
+    // 2. Query status
+    if let Ok(status) = app.tenwa_get_status() {
+        println!("WhatsApp Engine status: {}", status);
+    }
+
+    // 3. Send a message
+    let _ = app.tenwa_send_message("919876543210".to_string(), "Hello from Rust backend!".to_string());
+}
+```
+
+### Extension API Reference
+
+```rust
+pub trait TenwaExt<R: Runtime> {
+    /// Spawns the WhatsApp webview window.
+    /// If visible is true, the window will show; if false, it runs headlessly.
+    /// If window already exists, it un-hides and focuses the window.
+    fn tenwa_open(&self, visible: Option<bool>) -> Result<(), String>;
+
+    /// Updates internal status and emits real-time events.
+    fn tenwa_auth_status_update(&self, status: String, payload: String) -> Result<(), String>;
+
+    /// Retrieves current engine status as a serde_json::Value:
+    /// { "status": String, "payload": String, "started": bool }
+    fn tenwa_get_status(&self) -> Result<serde_json::Value, String>;
+
+    /// Saves a key-value configuration pair to local config.json.
+    fn tenwa_save_config_val(&self, key: String, value: String) -> Result<(), String>;
+
+    /// Sends a text message to the specified phone number (automatically appends @c.us).
+    fn tenwa_send_message(&self, phone: String, message: String) -> Result<(), String>;
+
+    /// Sends a base64 encoded media message (image/video/document) with optional caption.
+    fn tenwa_send_media(
+        &self,
+        phone: String,
+        message: String,
+        media_base64: String,
+        mime_type: String,
+        file_name: String,
+    ) -> Result<(), String>;
+
+    /// Programs log out from WhatsApp Web, unlinks session, and closes spooled webview window.
+    fn tenwa_logout(&self) -> Result<(), String>;
+}
+```
+
+---
+
+## Frontend Integration Guide
+
+The plugin includes a dedicated guest library **`guest-js/index.ts`** that exposes clean helper functions. This avoids writing raw `invoke` and `listen` commands in your frontend application.
+
+### TypeScript Definitions
+
+The guest-js library exposes the `WhatsAppStatus` structure:
 
 ```typescript
-import { listen } from "@tauri-apps/api/event";
+export interface WhatsAppStatus {
+  status: 'Offline' | 'QR' | 'CONNECTED' | 'authenticated' | string;
+  payload: string;   // QR code base64 reference string when status is "QR"
+  started: boolean;  // True if background webview has spooled
+}
+```
 
-// Listen to auth status updates
-const unlisten = await listen("auth_status", (event) => {
-  const { status, payload } = event.payload as { status: string; payload: string };
-  
-  if (status === "QR" && payload) {
-    // payload is the raw WhatsApp Web QR code string (e.g., to render via canvas or QRCode generator)
-    console.log("New QR Code:", payload);
-  } else if (status === "CONNECTED") {
-    console.log("WhatsApp Web is connected and authenticated.");
-  } else {
-    // Other statuses: Offline, PAIRING, TIMEOUT, etc.
-    console.log("Auth State Changed:", status);
-  }
+### Exposing Guest API Helper Functions
+
+You can import the functions directly into your React, Vue, Svelte, or TypeScript files:
+
+```typescript
+import { 
+  openWhatsApp, 
+  getWhatsAppStatus, 
+  sendWhatsAppMessage, 
+  sendWhatsAppMedia, 
+  logoutWhatsApp,
+  onWhatsAppStatusChange,
+  onWhatsAppQRChange
+} from 'tauri-plugin-tenwa/guest-js';
+
+// 1. Start WhatsApp spooled browser engine (headless by default)
+await openWhatsApp(false); 
+
+// 2. Fetch current engine status
+const currentStatus = await getWhatsAppStatus();
+console.log(`State: ${currentStatus.status}, Started: ${currentStatus.started}`);
+
+// 3. Send a text message (cleans formatting automatically)
+await sendWhatsAppMessage("919876543210", "Hello from Frontend!");
+
+// 4. Send media (e.g. base64 image or pdf)
+await sendWhatsAppMedia(
+  "919876543210",
+  "Check this receipt!",
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+  "image/png",
+  "receipt.png"
+);
+
+// 5. Unlink session and logout
+await logoutWhatsApp();
+
+// 6. Listen to real-time status updates (returns unsubscribe function)
+const unlisten = await onWhatsAppStatusChange((status, payload) => {
+  console.log(`Realtime Auth Status: ${status}`);
 });
-
-// To clean up the listener later (e.g., inside useEffect cleanup):
+// Cleanup when component unmounts:
 unlisten();
+
+// 7. Listen specifically to QR Code updates (returns unsubscribe function)
+const unlistenQR = await onWhatsAppQRChange((qrCodeString) => {
+  // Feed to your favorite QR code component or canvas generator
+  console.log("QR Code Update:", qrCodeString);
+});
+// Cleanup:
+unlistenQR();
 ```
 
-### 2. Checking Current Engine Status Manually
-Fetch the current status of the engine (e.g. upon app initialization or page load) to sync state.
-
-```typescript
-import { invoke } from "@tauri-apps/api/core";
-
-interface EngineStatus {
-  status: string;    // "CONNECTED", "QR", "Offline", etc.
-  payload: string;   // QR code data ref if status is "QR", otherwise empty
-  started: boolean;  // Whether the engine is active
-}
-
-async function checkStatus() {
-  try {
-    const status: EngineStatus = await invoke("plugin:tenWA|get_engine_status");
-    console.log("Current status:", status);
-  } catch (error) {
-    console.error("Failed to fetch engine status:", error);
-  }
-}
-```
-
-### 3. Starting the Engine (Opening WhatsApp Web Window)
-Launches the headless/spooled WhatsApp web window.
-
-```typescript
-import { invoke } from "@tauri-apps/api/core";
-
-async function startEngine(showWindow: boolean = false) {
-  try {
-    // Set visible to true to show the WhatsApp Web window, or false to keep it headless
-    await invoke("plugin:tenWA|open_whatsapp", { visible: showWindow });
-    console.log("WhatsApp engine successfully initialized");
-  } catch (error) {
-    console.error("Failed to start engine:", error);
-  }
-}
-```
-
-### 4. Logging Out (Disconnecting)
-Triggers standard logout workflows, invalidates the session WebSocket, and closes the browser window after unlinking.
-
-```typescript
-import { invoke } from "@tauri-apps/api/core";
-
-async function logout() {
-  try {
-    await invoke("plugin:tenWA|logout_whatsapp");
-    console.log("Successfully logged out and session unlinked");
-  } catch (error) {
-    console.error("Failed to log out:", error);
-  }
-}
-```
-
-### 5. Sending Text Messages
-Send a plain text message to a phone number.
-
-```typescript
-import { invoke } from "@tauri-apps/api/core";
-
-async function sendMessage(phoneNumber: string, message: string) {
-  try {
-    // phoneNumber: "1234567890" (do not include "@c.us" - the backend appends it)
-    await invoke("plugin:tenWA|send_message", {
-      phone: phoneNumber,
-      message: message
-    });
-    console.log("Message sent successfully");
-  } catch (error) {
-    console.error("Failed to send message:", error);
-  }
-}
-```
-
-### 6. Sending Media Messages (Images/Videos/Documents)
-Send a file via base64 encoding to a phone number.
-
-```typescript
-import { invoke } from "@tauri-apps/api/core";
-
-async function sendMediaMessage(
-  phoneNumber: string,
-  caption: string,
-  base64Data: string,
-  mimeType: string,
-  fileName: string
-) {
-  try {
-    // base64Data: raw base64 data string (e.g. without "data:image/png;base64,")
-    await invoke("plugin:tenWA|send_message_with_media", {
-      phone: phoneNumber,
-      message: caption,
-      mediaBase64: base64Data,
-      mimeType: mimeType,
-      fileName: fileName
-    });
-    console.log("Media message sent successfully");
-  } catch (error) {
-    console.error("Failed to send media:", error);
-  }
-}
-```
-
-### 7. Saving Configuration Value
-Store engine configuration key-values (e.g. country codes, auto-start delay parameters).
-
-```typescript
-import { invoke } from "@tauri-apps/api/core";
-
-async function saveConfig(key: string, value: string) {
-  try {
-    await invoke("plugin:tenWA|save_config_val", { key, value });
-    console.log(`Config ${key} saved successfully`);
-  } catch (error) {
-    console.error("Failed to save config:", error);
-  }
-}
-```
