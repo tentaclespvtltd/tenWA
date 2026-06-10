@@ -46,13 +46,13 @@ const QR_OBSERVER: &str = r#"
             const dataRef = container?.getAttribute('data-ref');
             if (dataRef && dataRef !== lastQr) {
                 lastQr = dataRef;
-                invoke('plugin:tenWA|auth_status_update', { status: 'QR', payload: dataRef });
+                invoke('plugin:tenwa|auth_status_update', { status: 'QR', payload: dataRef });
             }
         } else {
             const state = window.AuthStore?.AppState?.state;
             if (state && state !== lastStatus) {
                 lastStatus = state;
-                invoke('plugin:tenWA|auth_status_update', { status: state, payload: '' });
+                invoke('plugin:tenwa|auth_status_update', { status: state, payload: '' });
             }
         }
     }
@@ -359,7 +359,7 @@ async fn logout_whatsapp<R: Runtime>(
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
-    Builder::new("tenWA")
+    Builder::new("tenwa")
         .invoke_handler(tauri::generate_handler![
             open_whatsapp,
             auth_status_update,
@@ -377,9 +377,11 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                 started: false,
             }));
 
-            // Execute auto-start task if tenWA config is enabled
+            // Execute auto-start task if tenwa config is enabled
             let app_handle = app.clone();
-            let auto_start = read_config_val(&app_handle, "tenWA").unwrap_or_default() == "true";
+            let auto_start = read_config_val(&app_handle, "tenwa")
+                .or_else(|| read_config_val(&app_handle, "tenWA"))
+                .unwrap_or_default() == "true";
             let show_window = read_config_val(&app_handle, "show_whatsapp_window").unwrap_or_default() == "true";
             if auto_start {
                 println!("Auto-starting WhatsApp Web engine in a background task...");
