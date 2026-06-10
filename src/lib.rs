@@ -292,29 +292,59 @@ impl<R: Runtime> TenwaExt<R> for AppHandle<R> {
             (function() {
                 const invoke = window.__TAURI_INTERNALS__?.invoke;
                 if (!invoke) return;
+
+                const debugLog = (msg) => {
+                    invoke('plugin:tenwa|auth_status_update', { status: 'DEBUG', payload: msg }).catch(e => console.error(e));
+                };
                 
+                debugLog("Executing get_qr manual extraction...");
+
                 let state = window.AuthStore?.AppState?.state;
+                debugLog("AuthStore state is: " + state);
+
                 let payload = '';
 
                 const qrRefElement = document.querySelector('div[data-ref]');
                 if (qrRefElement) {
+                    debugLog("Found div[data-ref]");
                     const refString = qrRefElement.getAttribute('data-ref');
                     if (refString) {
+                        debugLog("Found data-ref string of length: " + refString.length);
                         state = 'QR';
                         payload = refString;
+                    } else {
+                        debugLog("data-ref attribute was empty");
                     }
+                } else {
+                    debugLog("div[data-ref] NOT found");
                 }
 
                 if (!payload) {
+                    debugLog("Falling back to canvas extraction...");
                     const qrCanvas = document.querySelector('canvas[aria-label="Scan me!"]') || document.querySelector('div[data-ref] canvas') || document.querySelector('canvas');
-                    if (qrCanvas && qrCanvas.width > 100) {
-                        state = 'QR';
-                        payload = qrCanvas.toDataURL('image/png');
+                    if (qrCanvas) {
+                        debugLog("Found canvas, width: " + qrCanvas.width);
+                        if (qrCanvas.width > 100) {
+                            state = 'QR';
+                            payload = qrCanvas.toDataURL('image/png');
+                            debugLog("Generated DataURL length: " + payload.length);
+                        } else {
+                            debugLog("Canvas too small to be a QR code");
+                        }
+                    } else {
+                        debugLog("No canvas found");
                     }
                 }
                 
                 if (state) {
                     invoke('plugin:tenwa|auth_status_update', { status: state, payload: payload }).catch(e => console.error(e));
+                } else {
+                    debugLog("No state determined, checking fallback elements...");
+                    const progress = document.querySelector('progress');
+                    const landingText = document.querySelector('[data-testid="whatsapp-logo-container"]');
+                    if (progress || landingText) {
+                        invoke('plugin:tenwa|auth_status_update', { status: 'LOADING', payload: '' }).catch(e => console.error(e));
+                    }
                 }
             })();
         "#;
