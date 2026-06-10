@@ -279,4 +279,17 @@ Enables save_config_val command
 
 </td>
 </tr>
+
+<tr>
+<td>
+
+`tenwa:default`
+
+</td>
+<td>
+
+Default permissions for tenwa plugin
+
+</td>
+</tr>
 </table>

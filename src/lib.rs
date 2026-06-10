@@ -13,23 +13,35 @@ use state::EngineState;
 
 const QR_OBSERVER: &str = r#"
 (function() {
-    let lastQr = null;
+    let lastQrData = null;
     let lastStatus = null;
 
     function tryNotify() {
         const invoke = window.__TAURI_INTERNALS__?.invoke;
         if (!invoke) return;
 
-        const qrCanvas = document.querySelector('div[data-ref] canvas') || document.querySelector('canvas[aria-label="Scan me!"]');
-        if (qrCanvas) {
-            const container = qrCanvas.closest('[data-ref]');
-            const dataRef = container?.getAttribute('data-ref');
-            if (dataRef && dataRef !== lastQr) {
-                lastQr = dataRef;
-                invoke('plugin:tenwa|auth_status_update', { status: 'QR', payload: dataRef });
+        // Find the QR canvas reliably
+        const qrCanvas = document.querySelector('canvas[aria-label="Scan me!"]') || document.querySelector('div[data-ref] canvas') || document.querySelector('canvas');
+        
+        // Ensure the canvas is actually the QR code (typically it's the only canvas, or a large one)
+        if (qrCanvas && qrCanvas.width > 100) {
+            const dataUrl = qrCanvas.toDataURL('image/png');
+            if (dataUrl && dataUrl !== lastQrData) {
+                lastQrData = dataUrl;
+                invoke('plugin:tenwa|auth_status_update', { status: 'QR', payload: dataUrl });
             }
         } else {
-            const state = window.AuthStore?.AppState?.state;
+            let state = window.AuthStore?.AppState?.state;
+            
+            // DOM FALLBACK
+            if (!state) {
+                const chatList = document.querySelector('div[aria-label="Chat list"]');
+                const searchBox = document.querySelector('div[title="Search input textbox"]');
+                if (chatList || searchBox) {
+                    state = 'CONNECTED';
+                }
+            }
+
             if (state && state !== lastStatus) {
                 lastStatus = state;
                 invoke('plugin:tenwa|auth_status_update', { status: state, payload: '' });
@@ -37,7 +49,7 @@ const QR_OBSERVER: &str = r#"
         }
     }
 
-    setInterval(tryNotify, 1500);
+    setInterval(tryNotify, 1000);
 })();
 "#;
 
@@ -64,6 +76,7 @@ impl<R: Runtime> TenwaExt<R> for AppHandle<R> {
         {
             let mut s = state.lock().map_err(|e| e.to_string())?;
             s.started = true;
+            s.status = "Starting...".to_string();
         }
 
         let is_visible = visible.unwrap_or(false);

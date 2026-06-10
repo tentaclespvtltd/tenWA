@@ -419,6 +419,12 @@
           "type": "string",
           "const": "allow-save-config-val",
           "markdownDescription": "Enables save_config_val command"
+        },
+        {
+          "description": "Default permissions for tenwa plugin",
+          "type": "string",
+          "const": "default",
+          "markdownDescription": "Default permissions for tenwa plugin"
         }
       ]
     }
