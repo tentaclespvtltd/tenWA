@@ -23,6 +23,13 @@ export async function getWhatsAppStatus(): Promise<WhatsAppStatus> {
 }
 
 /**
+ * Forces the webview to check and emit the QR code payload.
+ */
+export async function getQr(): Promise<void> {
+  await invoke('plugin:tenwa|get_qr');
+}
+
+/**
  * Saves a key-value configuration pair to local config.json.
  */
 export async function saveConfigVal(key: string, value: string): Promise<void> {

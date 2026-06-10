@@ -34,6 +34,11 @@ description = "Enables save_config_val command"
 commands.allow = ["save_config_val"]
 
 [[permission]]
+identifier = "allow-get-qr"
+description = "Enables get_qr command"
+commands.allow = ["get_qr"]
+
+[[permission]]
 identifier = "default"
 description = "Default permissions for tenwa plugin"
 permissions = [
@@ -43,6 +48,7 @@ permissions = [
     "allow-send-message-with-media",
     "allow-logout-whatsapp",
     "allow-get-engine-status",
-    "allow-save-config-val"
+    "allow-save-config-val",
+    "allow-get-qr"
 ]
 

@@ -35,33 +35,58 @@ const QR_OBSERVER: &str = r#"
         if (qrCanvas && qrCanvas.width > 100) {
             const dataUrl = qrCanvas.toDataURL('image/png');
             if (dataUrl && dataUrl !== lastQrData) {
-                console.log("[tenWA] Emitting new QR Code dataUrl (length:", dataUrl.length, ")");
-                lastQrData = dataUrl;
-                invoke('plugin:tenwa|auth_status_update', { status: 'QR', payload: dataUrl });
-            }
-        } else {
-            let state = window.AuthStore?.AppState?.state;
-            
-            // DOM FALLBACK
-            if (!state) {
-                const chatList = document.querySelector('div[aria-label="Chat list"]');
-                const searchBox = document.querySelector('div[title="Search input textbox"]');
-                if (chatList || searchBox) {
-                    state = 'CONNECTED';
-                }
-            }
+        let state = window.AuthStore?.AppState?.state;
+        let payload = '';
 
-            if (state && state !== lastStatus) {
-                console.log("[tenWA] Emitting new Auth state:", state);
-                lastStatus = state;
-                invoke('plugin:tenwa|auth_status_update', { status: state, payload: '' });
+        // WhatsApp Web updated their DOM: The QR code is now often represented as a raw string inside div[data-ref]
+        const qrRefElement = document.querySelector('div[data-ref]');
+        if (qrRefElement) {
+            const refString = qrRefElement.getAttribute('data-ref');
+            if (refString) {
+                state = 'QR';
+                payload = refString;
+            }
+        }
+
+        // Fallback to Canvas extraction if data-ref isn't present
+        if (!payload) {
+            const qrCanvas = document.querySelector('canvas[aria-label="Scan me!"]') || document.querySelector('div[data-ref] canvas') || document.querySelector('canvas');
+            if (qrCanvas && qrCanvas.width > 100) {
+                state = 'QR';
+                payload = qrCanvas.toDataURL('image/png');
+            }
+        }
+
+        if (!state) {
+            // DOM FALLBACK
+            const chatList = document.querySelector('div[aria-label="Chat list"]');
+            const searchBox = document.querySelector('div[title="Search input textbox"]');
+            const progress = document.querySelector('progress');
+            const landingText = document.querySelector('[data-testid="whatsapp-logo-container"]');
+            
+            if (chatList || searchBox) {
+                state = 'CONNECTED';
+            } else if (progress || landingText) {
+                state = 'LOADING';
+            } else {
+                state = 'WAITING_FOR_QR';
+            }
+        }
+
+        if (state !== lastStatus || (state === 'QR' && payload !== lastQrData)) {
+            lastStatus = state;
+            if (state === 'QR') lastQrData = payload;
+
+            // Try standard IPC
+            if (invoke) {
+                invoke('plugin:tenwa|auth_status_update', { status: state, payload: payload }).catch(e => console.error("IPC Error:", e));
+            } else {
+                console.log("[tenWA] window.__TAURI_INTERNALS__?.invoke not found.");
             }
         }
     }
 
-    // Try more frequently to catch the QR code quickly
     setInterval(tryNotify, 1000);
-    console.log("[tenWA] QR_OBSERVER injected and running.");
 })();
 "#;
 
@@ -79,6 +104,7 @@ pub trait TenwaExt<R: Runtime> {
         mime_type: String,
         file_name: String,
     ) -> Result<(), String>;
+    fn tenwa_get_qr(&self) -> Result<(), String>;
     fn tenwa_logout(&self) -> Result<(), String>;
 }
 
@@ -257,6 +283,45 @@ impl<R: Runtime> TenwaExt<R> for AppHandle<R> {
         Ok(())
     }
 
+    fn tenwa_get_qr(&self) -> Result<(), String> {
+        let window = self
+            .get_webview_window("whatsapp")
+            .ok_or("WhatsApp window not found. Please open it first.")?;
+
+        let js_code = r#"
+            (function() {
+                const invoke = window.__TAURI_INTERNALS__?.invoke;
+                if (!invoke) return;
+                
+                let state = window.AuthStore?.AppState?.state;
+                let payload = '';
+
+                const qrRefElement = document.querySelector('div[data-ref]');
+                if (qrRefElement) {
+                    const refString = qrRefElement.getAttribute('data-ref');
+                    if (refString) {
+                        state = 'QR';
+                        payload = refString;
+                    }
+                }
+
+                if (!payload) {
+                    const qrCanvas = document.querySelector('canvas[aria-label="Scan me!"]') || document.querySelector('div[data-ref] canvas') || document.querySelector('canvas');
+                    if (qrCanvas && qrCanvas.width > 100) {
+                        state = 'QR';
+                        payload = qrCanvas.toDataURL('image/png');
+                    }
+                }
+                
+                if (state) {
+                    invoke('plugin:tenwa|auth_status_update', { status: state, payload: payload }).catch(e => console.error(e));
+                }
+            })();
+        "#;
+        window.eval(js_code).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     fn tenwa_logout(&self) -> Result<(), String> {
         let state = self.state::<Mutex<EngineState>>();
         {
@@ -341,6 +406,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::open_whatsapp,
             commands::auth_status_update,
             commands::get_engine_status,
+            commands::get_qr,
             commands::save_config_val,
             commands::send_message,
             commands::send_message_with_media,

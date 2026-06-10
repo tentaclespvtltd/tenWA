@@ -56,6 +56,13 @@ pub async fn send_message_with_media<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn get_qr<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<(), String> {
+    app.tenwa_get_qr()
+}
+
+#[tauri::command]
 pub async fn logout_whatsapp<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<(), String> {

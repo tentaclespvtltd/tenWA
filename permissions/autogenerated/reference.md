@@ -283,6 +283,19 @@ Enables save_config_val command
 <tr>
 <td>
 
+`tenwa:allow-get-qr`
+
+</td>
+<td>
+
+Enables get_qr command
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `tenwa:default`
 
 </td>

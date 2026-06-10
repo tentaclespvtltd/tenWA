@@ -421,6 +421,12 @@
           "markdownDescription": "Enables save_config_val command"
         },
         {
+          "description": "Enables get_qr command",
+          "type": "string",
+          "const": "allow-get-qr",
+          "markdownDescription": "Enables get_qr command"
+        },
+        {
           "description": "Default permissions for tenwa plugin",
           "type": "string",
           "const": "default",
