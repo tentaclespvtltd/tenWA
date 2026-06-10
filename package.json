@@ -1,0 +1,9 @@
+{
+  "name": "tauri-plugin-tenwa",
+  "version": "0.1.0",
+  "main": "guest-js/index.ts",
+  "types": "guest-js/index.ts",
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0"
+  }
+}
